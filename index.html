@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Abandoned City 3D</title>
+<style>
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#101820;color:#fff;font-family:system-ui,sans-serif}
+  #hud{position:fixed;z-index:5;left:14px;top:12px;background:#101820cc;border:1px solid #ffffff30;border-radius:10px;padding:10px 13px;max-width:340px;line-height:1.5}
+  #hint{color:#cbd5e1;font-size:13px}
+  #status{color:#a7f3d0;font-size:13px}
+  #crosshair{position:fixed;z-index:4;left:50%;top:50%;width:6px;height:6px;border:1px solid #fff9;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none}
+  #start{position:fixed;z-index:10;inset:0;display:grid;place-items:center;background:#07111ddd}
+  #panel{max-width:520px;margin:20px;padding:24px;background:#111c28;border:1px solid #ffffff30;border-radius:16px;text-align:center}
+  button{border:0;border-radius:9px;background:#16a34a;color:white;font-size:16px;padding:12px 18px;cursor:pointer}
+  #mobile{position:fixed;z-index:6;bottom:16px;left:16px;display:none;gap:8px}
+  #mobile button{background:#172536cc;border:1px solid #ffffff44;padding:13px 17px}
+  @media(max-width:700px){#mobile{display:flex;flex-wrap:wrap;width:190px}#hud{max-width:240px;font-size:13px}}
+</style>
+</head>
+<body>
+<div id="hud"><b>เมืองร้าง 3D</b><div id="hint">WASD เดิน · เมาส์หมุนกล้อง · Shift วิ่ง · คลิกเพื่อจับเมาส์</div><div id="status">กำลังสร้างเมือง…</div></div>
+<div id="crosshair"></div>
+<div id="start"><div id="panel"><h1>เมืองร้าง 3D</h1><p>ต้นแบบเกมมุมมองบุคคลที่สาม สำรวจถนน อาคารร้าง และรถที่ถูกทิ้งไว้</p><p>คอมพิวเตอร์: WASD เดิน, เมาส์หมุนกล้อง, Shift วิ่ง, Esc ปลดเมาส์</p><button id="play">เริ่มเล่น</button><p style="color:#94a3b8;font-size:12px">ต้องเชื่อมต่ออินเทอร์เน็ตเพื่อโหลด Three.js</p></div></div>
+<div id="mobile">
+<button data-key="w">▲</button><button data-key="a">◀</button><button data-key="s">▼</button><button data-key="d">▶</button>
+</div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+import { OBJLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/OBJLoader.js';
+
+const status = document.querySelector('#status');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87969b);
+scene.fog = new THREE.Fog(0x87969b, 45, 180);
+const camera = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, .1, 500);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xc8d8e8,0x34372e,2.0));
+const sun = new THREE.DirectionalLight(0xffe3bf,2.2); sun.position.set(-35,65,30); sun.castShadow=true; sun.shadow.mapSize.set(2048,2048); scene.add(sun);
+
+const mats = {
+ asphalt:new THREE.MeshStandardMaterial({color:0x343a3c,roughness:1}),
+ concrete:new THREE.MeshStandardMaterial({color:0x777a74,roughness:1}),
+ wall1:new THREE.MeshStandardMaterial({color:0x77766c,roughness:1}),
+ wall2:new THREE.MeshStandardMaterial({color:0x595e5c,roughness:1}),
+ glass:new THREE.MeshStandardMaterial({color:0x26383a,metalness:.25,roughness:.45}),
+ dark:new THREE.MeshStandardMaterial({color:0x202525,roughness:.9}),
+ rust:new THREE.MeshStandardMaterial({color:0x704d3a,roughness:.95}),
+ line:new THREE.MeshStandardMaterial({color:0xb6a982,roughness:1}),
+ skin:new THREE.MeshStandardMaterial({color:0xb58c70,roughness:.8}),
+ shirt:new THREE.MeshStandardMaterial({color:0x303c3a,roughness:.95}),
+ pants:new THREE.MeshStandardMaterial({color:0x242a2e,roughness:1})
+};
+function box(w,h,d,mat,x,y,z, parent=scene, cast=true){
+ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);m.castShadow=cast;m.receiveShadow=true;parent.add(m);return m;
+}
+const ground=box(260,.5,260,new THREE.MeshStandardMaterial({color:0x4b5148,roughness:1}),0,-.4,0);
+const road=box(18,.08,230,mats.asphalt,0,-.08,0,false);
+for(let z=-105;z<115;z+=10) box(.18,.02,4,mats.line,0,-.025,z,false);
+box(3,.05,230,mats.concrete,-10.7,-.02,0,false);box(3,.05,230,mats.concrete,10.7,-.02,0,false);
+// side streets and grid of abandoned buildings
+for(let x of [-38,-24,24,38]){
+ box(9,.06,230,mats.asphalt,x,-.1,0,false);
+ for(let z=-95;z<=95;z+=28){
+  if(Math.random()<.12) continue;
+  const w=10+Math.random()*8, d=12+Math.random()*10, h=9+Math.random()*25;
+  const bx=x+(Math.random()-.5)*4, bz=z+(Math.random()-.5)*5;
+  const building=new THREE.Group();scene.add(building);
+  box(w,h,d,Math.random()>.5?mats.wall1:mats.wall2,bx,h/2-.1,bz,building);
+  // roof parapet and broken roof details
+  box(w+.4,.5,d+.4,mats.concrete,bx,h,bz,building);
+  for(let yy=2.5;yy<h-1;yy+=3.2){
+   for(let xx=-w/2+1.2;xx<w/2-0.5;xx+=2.5){
+    box(1.15,1.65,.08,mats.glass,bx+xx,yy,bz+d/2+.05,building,false);
+    box(.08,1.8,.1,mats.dark,bx+xx-.6,yy,bz+d/2+.1,building,false);
+   }
+  }
+  // debris at the base
+  for(let k=0;k<5;k++){
+   const rock=box(.5+Math.random(),.25,.4,mats.concrete,bx+(Math.random()-.5)*w,h*0,bz+(Math.random()-.5)*d,building);
+   rock.rotation.y=Math.random()*3;
+  }
+ }
+}
+// wrecked cars along the roads
+function car(x,z,rot,color){
+ const g=new THREE.Group();scene.add(g);g.position.set(x,.15,z);g.rotation.y=rot;
+ const bodymat=new THREE.MeshStandardMaterial({color,roughness:.9});
+ box(2.2,.65,4.2,bodymat,0,.65,0,g);
+ box(1.65,.75,1.9,mats.glass,0,1.28,-.15,g);
+ box(2.18,.16,1.0,mats.rust,0,.38,1.1,g);
+ for(const wx of [-1.08,1.08]) for(const wz of [-1.35,1.35]){
+  const wheel=new THREE.Mesh(new THREE.CylinderGeometry(.38,.38,.22,12),mats.dark);wheel.rotation.z=Math.PI/2;wheel.position.set(wx,.35,wz);wheel.castShadow=true;g.add(wheel);
+ }
+ box(.2,.18,.08,mats.line,-.65,.68,2.13,g,false);box(.2,.18,.08,mats.line,.65,.68,2.13,g,false);
+}
+for(let i=0;i<15;i++){let z=-95+i*13+(Math.random()-.5)*4;car((i%2?1:-1)*(6.2+Math.random()*1.2),z, (Math.random()-.5)*.22,[0x59605d,0x6b4a37,0x404a50,0x77735e][i%4]);}
+// street lamps
+for(let z=-90;z<100;z+=20){for(let x of [-12,12]){box(.16,5,.16,mats.dark,x,2.5,z);box(1.2,.12,.2,mats.dark,x+.45,4.9,z);}}
+ // character: simple articulated human-like fallback
+const player=new THREE.Group();scene.add(player);player.position.set(0,0,8);
+const torso=box(.85,1.15,.42,mats.shirt,0,1.55,0,player);
+const head=new THREE.Mesh(new THREE.SphereGeometry(.27,16,12),mats.skin);head.position.set(0,2.35,0);head.castShadow=true;player.add(head);
+const legs=[];
+for(const x of [-.23,.23]){const leg=box(.27,.9,.3,mats.pants,x,.55,0,player);legs.push(leg);}
+for(const x of [-.58,.58]){box(.22,.85,.24,mats.shirt,x,1.55,0,player);}
+box(.34,.16,.45,mats.dark,0,.12,.03,player);
+let modelLoaded=false;
+try {
+ const obj=await new OBJLoader().loadAsync('./ordinary_male_preview.obj');
+ obj.scale.setScalar(1);
+ const b=new THREE.Box3().setFromObject(obj), size=b.getSize(new THREE.Vector3());
+ if(size.y>0){obj.scale.setScalar(2.5/size.y);const bb=new THREE.Box3().setFromObject(obj);obj.position.y-=bb.min.y;player.clear();player.add(obj);modelLoaded=true;}
+} catch(e) { /* Keep built-in character if OBJ isn't uploaded beside index.html. */ }
+status.textContent=modelLoaded?'โหลดโมเดล ordinary_male_preview.obj แล้ว':'พร้อมเล่น — ใช้ตัวละครต้นแบบ (อัปโหลด OBJ ไว้ข้าง index.html เพื่อใช้โมเดลของคุณ)';
+const keys={};let yaw=0,pitch=.22,mouseLocked=false;
+addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(['w','a','s','d',' '].includes(e.key.toLowerCase()))e.preventDefault();});
+addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+renderer.domElement.addEventListener('click',()=>{if(document.querySelector('#start').style.display==='none')renderer.domElement.requestPointerLock?.();});
+document.addEventListener('pointerlockchange',()=>mouseLocked=document.pointerLockElement===renderer.domElement);
+document.addEventListener('mousemove',e=>{if(mouseLocked){yaw-=e.movementX*.0025;pitch=Math.max(-.05,Math.min(.8,pitch+e.movementY*.0018));}});
+document.querySelector('#play').onclick=()=>{document.querySelector('#start').style.display='none';renderer.domElement.requestPointerLock?.();};
+document.querySelectorAll('[data-key]').forEach(b=>{
+ const k=b.dataset.key;b.addEventListener('pointerdown',e=>{e.preventDefault();keys[k]=true;});
+ for(const ev of ['pointerup','pointerleave','pointercancel'])b.addEventListener(ev,()=>keys[k]=false);
+});
+let last=performance.now();
+function animate(now){
+ requestAnimationFrame(animate);const dt=Math.min((now-last)/1000,.04);last=now;
+ const forward=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
+ const right=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
+ let move=new THREE.Vector3();
+ if(keys.w)move.add(forward);if(keys.s)move.sub(forward);if(keys.d)move.add(right);if(keys.a)move.sub(right);
+ if(move.lengthSq()){move.normalize().multiplyScalar((keys.shift?9:5)*dt);player.position.add(move);player.rotation.y=Math.atan2(-move.x,-move.z);}
+ player.position.x=THREE.MathUtils.clamp(player.position.x,-55,55);player.position.z=THREE.MathUtils.clamp(player.position.z,-112,112);
+ const target=new THREE.Vector3(player.position.x,1.4,player.position.z);
+ const dist=7.5, horiz=Math.cos(pitch)*dist, vert=2.2+Math.sin(pitch)*dist;
+ camera.position.set(player.position.x+Math.sin(yaw)*horiz,target.y+vert,player.position.z+Math.cos(yaw)*horiz);
+ camera.lookAt(target);
+ renderer.render(scene,camera);
+}
+requestAnimationFrame(animate);
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+</script>
+</body>
+</html>
